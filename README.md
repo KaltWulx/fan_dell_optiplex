@@ -50,21 +50,27 @@ Unlike simple linear scripts, this controller uses advanced control theory conce
 Once installed, the script runs as a systemd service (`fan_control.service`) in the background.
 
 ### CLI Commands
-You can interact with the script using the installed command:
+You can interact with the script using the installed command `fan-control`:
 
 *   **View Status/Logs:**
     ```bash
-    fan_control.sh --log
+    fan-control --log
     ```
 *   **Check Configuration:**
     ```bash
-    fan_control.sh --help
+    fan-control --help
     ```
 *   **Change Profile (Temporary):**
     ```bash
     # Edit /etc/fan_control.conf for permanent changes
     sudo systemctl restart fan_control.service
     ```
+
+### Calibration
+To re-run the calibration tool at any time:
+```bash
+sudo fan-calibrate
+```
 
 ### Configuration File
 Located at `/etc/fan_control.conf`. You can edit this file to tweak settings manually:
@@ -85,9 +91,12 @@ To remove the fan control from your system:
 sudo systemctl stop fan_control.service
 sudo systemctl disable fan_control.service
 
-# Remove files
+# Remove files and aliases
 sudo rm /usr/local/bin/fan_control.sh
+sudo rm /usr/local/bin/fan-control
+sudo rm /usr/local/bin/dell-fan-control
 sudo rm /usr/local/bin/fan_calibration.sh
+sudo rm /usr/local/bin/fan-calibrate
 sudo rm /etc/systemd/system/fan_control.service
 sudo rm /etc/fan_control.conf
 

@@ -30,12 +30,17 @@ fi
 echo "--> Installing scripts to $INSTALL_DIR..."
 cp "$SCRIPT_NAME" "$INSTALL_DIR/$SCRIPT_NAME"
 chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
-echo "    $SCRIPT_NAME installed."
+
+# Create user-friendly symlinks (aliases)
+ln -sf "$INSTALL_DIR/$SCRIPT_NAME" "$INSTALL_DIR/fan-control"
+ln -sf "$INSTALL_DIR/$SCRIPT_NAME" "$INSTALL_DIR/dell-fan-control"
+echo "    $SCRIPT_NAME installed (aliased as 'fan-control')."
 
 if [[ -f "$CALIB_NAME" ]]; then
     cp "$CALIB_NAME" "$INSTALL_DIR/$CALIB_NAME"
     chmod +x "$INSTALL_DIR/$CALIB_NAME"
-    echo "    $CALIB_NAME installed."
+    ln -sf "$INSTALL_DIR/$CALIB_NAME" "$INSTALL_DIR/fan-calibrate"
+    echo "    $CALIB_NAME installed (aliased as 'fan-calibrate')."
 fi
 
 # 3. Create Systemd Service (Install first so calibration can restart it)
@@ -70,7 +75,7 @@ read -p "Do you want to run the calibration tool now? (Recommended) [y/N]: " run
 
 if [[ "$run_calib" =~ ^[yY]$ ]]; then
     echo "--> Launching calibration tool..."
-    "$INSTALL_DIR/$CALIB_NAME"
+    fan-calibrate
 else
     # Create Default Config ONLY if it doesn't exist and user skipped calibration
     if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -125,7 +130,7 @@ echo "Installation Complete!"
 echo "--------------------------------------------------"
 echo "Commands:"
 echo "  Status:    systemctl status fan_control.service"
-echo "  Logs:      $INSTALL_DIR/$SCRIPT_NAME --log"
-echo "  Calibrate: sudo $INSTALL_DIR/$CALIB_NAME"
-echo "  Help:      $INSTALL_DIR/$SCRIPT_NAME --help"
+echo "  Logs:      fan-control --log"
+echo "  Calibrate: sudo fan-calibrate"
+echo "  Help:      fan-control --help"
 echo "=================================================="
