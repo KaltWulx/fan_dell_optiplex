@@ -16,35 +16,45 @@ SERVICE_FILE="/etc/systemd/system/fan_control.service"
 SCRIPT_NAME="fan_control.sh"
 CALIB_NAME="fan_calibration.sh"
 
-echo "=================================================="
-echo "      Dell Optiplex Fan Control Installer         "
-echo "=================================================="
+cat <<'EOF'
+███████╗ █████╗ ███╗   ██╗████████╗ █████╗ ██╗     ██╗      ██████╗ ██████╗ ██╗      ██████╗ 
+██╔════╝██╔══██╗████╗  ██║╚══██╔══╝██╔══██╗██║     ██║     ██╔═══██╗██╔══██╗██║     ██╔══██╗
+███████╗███████║██╔██╗ ██║   ██║   ███████║██║     ██║     ██║   ██║██████╔╝██║     ██████╔╝
+╚════██║██╔══██║██║╚██╗██║   ██║   ██╔══██║██║     ██║     ██║   ██║██╔══██╗██║     ██╔══██╗
+███████║██║  ██║██║ ╚████║   ██║   ██║  ██║███████╗███████╗╚██████╔╝██║  ██║███████╗██║  ██║
+╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
+
+             Fan Dell Fan Control - Installer
+EOF
+
+echo "✦ Welcome to the Dell Optiplex Intelligent Fan Control installer"
 
 # 1. Verify source files
+echo "🔍 Verifying source artifacts..."
 if [[ ! -f "$SCRIPT_NAME" ]]; then
-    echo "Error: $SCRIPT_NAME not found in current directory."
+    echo "🚫 Error: $SCRIPT_NAME not found in current directory."
     exit 1
 fi
 
 # 2. Install Scripts
-echo "--> Installing scripts to $INSTALL_DIR..."
+echo "🛠️  Installing scripts to $INSTALL_DIR..."
 cp "$SCRIPT_NAME" "$INSTALL_DIR/$SCRIPT_NAME"
 chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
 
 # Create user-friendly symlinks (aliases)
 ln -sf "$INSTALL_DIR/$SCRIPT_NAME" "$INSTALL_DIR/fan-control"
 ln -sf "$INSTALL_DIR/$SCRIPT_NAME" "$INSTALL_DIR/dell-fan-control"
-echo "    $SCRIPT_NAME installed (aliased as 'fan-control')."
+echo "  ✅ $SCRIPT_NAME installed (aliases: fan-control, dell-fan-control)."
 
 if [[ -f "$CALIB_NAME" ]]; then
     cp "$CALIB_NAME" "$INSTALL_DIR/$CALIB_NAME"
     chmod +x "$INSTALL_DIR/$CALIB_NAME"
     ln -sf "$INSTALL_DIR/$CALIB_NAME" "$INSTALL_DIR/fan-calibrate"
-    echo "    $CALIB_NAME installed (aliased as 'fan-calibrate')."
+    echo "  ✅ $CALIB_NAME installed (alias: fan-calibrate)."
 fi
 
 # 3. Create Systemd Service (Install first so calibration can restart it)
-echo "--> Creating systemd service at $SERVICE_FILE..."
+echo "⚙️  Generating systemd service at $SERVICE_FILE..."
 cat <<EOF > "$SERVICE_FILE"
 [Unit]
 Description=Dell Optiplex Intelligent Fan Control
@@ -68,18 +78,18 @@ EOF
 systemctl daemon-reload
 systemctl enable fan_control.service
 
-# 4. Calibration / Configuration
 echo ""
+echo "🧪 Calibration / Configuration"
 echo "--------------------------------------------------"
 read -p "Do you want to run the calibration tool now? (Recommended) [y/N]: " run_calib
 
 if [[ "$run_calib" =~ ^[yY]$ ]]; then
-    echo "--> Launching calibration tool..."
+    echo "✨ Launching calibration tool..."
     fan-calibrate
 else
     # Create Default Config ONLY if it doesn't exist and user skipped calibration
     if [[ ! -f "$CONFIG_FILE" ]]; then
-        echo "--> Creating default configuration at $CONFIG_FILE..."
+        echo "📝 Creating default configuration at $CONFIG_FILE..."
         cat <<EOF > "$CONFIG_FILE"
 # /etc/fan_control.conf
 # Default configuration for Dell Optiplex Fan Control
@@ -106,31 +116,33 @@ QUIET_MAX_PWM=165
 TEMP_HYSTERESIS=2
 SLEW_RATE_LIMIT=15
 EOF
-        echo "    Default config created."
+        echo "  ✅ Default config created."
     else
-        echo "--> Configuration file already exists (skipping default creation)."
+        echo "⚠️  Configuration file already exists (skipping default creation)."
     fi
     
     # Start service manually since calibration didn't do it
-    echo "--> Starting service..."
+    echo "🚀 Starting fan_control.service..."
     systemctl restart fan_control.service
 fi
 
 # 5. Verification
 echo ""
 if systemctl is-active --quiet fan_control.service; then
-    echo "SUCCESS: Service is running."
+    echo "✅ Service is running."
 else
-    echo "WARNING: Service failed to start. Check logs."
+    echo "🚨 Service failed to start. Check logs and rerun 'systemctl status fan_control.service'."
 fi
 
 echo ""
-echo "=================================================="
-echo "Installation Complete!"
-echo "--------------------------------------------------"
-echo "Commands:"
-echo "  Status:    systemctl status fan_control.service"
-echo "  Logs:      fan-control --log"
-echo "  Calibrate: sudo fan-calibrate"
-echo "  Help:      fan-control --help"
-echo "=================================================="
+cat <<'EOF'
+╔═══════════════════════════════════════════╗
+║      Installation Complete!               ║
+╠═══════════════════════════════════════════╣
+║ Commands:                                 ║
+║   • Status:    systemctl status fan_control.service
+║   • Logs:      fan-control --log
+║   • Calibrate: sudo fan-calibrate
+║   • Help:      fan-control --help
+╚═══════════════════════════════════════════╝
+EOF
