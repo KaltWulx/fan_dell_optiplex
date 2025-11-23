@@ -35,6 +35,59 @@ if [[ -f "$CONFIG_FILE" ]]; then
 fi
 
 # === CLI ARGUMENT PARSING ===
+
+# Function for uninstallation
+uninstall_script() {
+    if [[ $EUID -ne 0 ]]; then
+       echo "Error: Uninstallation must be run as root."
+       echo "Try: sudo $0 uninstall"
+       exit 1
+    fi
+
+    echo "=================================================="
+    echo "      Dell Optiplex Fan Control - Uninstall       "
+    echo "=================================================="
+    echo "This will remove:"
+    echo "- Service: fan_control.service"
+    echo "- Config:  /etc/fan_control.conf"
+    echo "- Scripts: /usr/local/bin/fan_control.sh & aliases"
+    echo "- Calibration tool"
+    echo ""
+    read -p "Are you sure you want to proceed? (y/N): " confirm
+    
+    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        echo "Uninstallation aborted."
+        exit 0
+    fi
+
+    echo ""
+    echo "--> Stopping and disabling service..."
+    systemctl stop fan_control.service 2>/dev/null
+    systemctl disable fan_control.service 2>/dev/null
+
+    echo "--> Removing systemd unit..."
+    rm -f /etc/systemd/system/fan_control.service
+    systemctl daemon-reload
+
+    echo "--> Removing configuration..."
+    rm -f /etc/fan_control.conf
+
+    echo "--> Removing scripts and aliases..."
+    rm -f /usr/local/bin/fan_calibration.sh
+    rm -f /usr/local/bin/fan-calibrate
+    rm -f /usr/local/bin/fan-control
+    rm -f /usr/local/bin/dell-fan-control
+    
+    # Remove self last
+    echo "--> Removing main script..."
+    rm -f /usr/local/bin/fan_control.sh
+    
+    echo "=================================================="
+    echo "Uninstallation complete. System fan control restored to BIOS/Hardware default."
+    echo "=================================================="
+    exit 0
+}
+
 show_help() {
     echo "Usage: $0 [OPTIONS]"
     echo "Dell Optiplex Intelligent Fan Control"
@@ -42,6 +95,7 @@ show_help() {
     echo "Options:"
     echo "  --profile <mode>   Sets the profile (balanced, performance)"
     echo "  --log              Shows real-time log (tail -f)"
+    echo "  uninstall          Removes the service and all files"
     echo "  --help             Shows this help"
     echo ""
     echo "Current Active Configuration:"
@@ -68,6 +122,10 @@ while [[ $# -gt 0 ]]; do
         --log)
             echo "Showing logs for $LOG_TAG (Ctrl+C to exit)..."
             journalctl -t "$LOG_TAG" -f
+            exit 0
+            ;;
+        uninstall)
+            uninstall_script
             exit 0
             ;;
         --help)
