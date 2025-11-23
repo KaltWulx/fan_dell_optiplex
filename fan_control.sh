@@ -222,6 +222,7 @@ resolve_paths() {
 previous_pwm=$MIN_PWM
 previous_temp=0
 previous_temp_diff=0  # To calculate acceleration (2nd derivative)
+last_temp_update=0    # Temperature at last fan update (for hysteresis)
 
 # Function for systemd compatible logging
 log_message() {
@@ -481,8 +482,12 @@ apply_fan_control() {
     local pwm_diff=$((target_pwm - previous_pwm))
     if (( pwm_diff < 0 )); then pwm_diff=$((-pwm_diff)); fi
     
-    # Update conditions: Significant change, leaving minimum, or emergency
-    if (( pwm_diff > 10 )) || (( previous_pwm == MIN_PWM )) || (( is_emergency )); then
+    # Calculate temp delta since last actual update (Hysteresis)
+    local temp_delta=$((current_temp - last_temp_update))
+    if (( temp_delta < 0 )); then temp_delta=$((-temp_delta)); fi
+
+    # Update conditions: Significant PWM change, Temp Hysteresis, leaving minimum, or emergency
+    if (( pwm_diff > 10 )) || (( temp_delta >= TEMP_HYSTERESIS )) || (( previous_pwm == MIN_PWM )) || (( is_emergency )); then
         
         # === SLEW RATE LIMITING (Smoothing) ===
         if (( ! is_emergency )); then
@@ -515,6 +520,7 @@ apply_fan_control() {
         
         # Update global state
         previous_pwm=$target_pwm
+        last_temp_update=$current_temp
     fi
 }
 
