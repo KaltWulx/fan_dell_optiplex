@@ -84,27 +84,16 @@ QUIET_MAX_PWM=165       # Max PWM for "Quiet" zone in Balanced mode
 
 ## 🗑️ Uninstallation
 
-To remove the fan control from your system:
+To remove the fan control from your system completely, simply run:
 
 ```bash
-# Stop and disable the service
-sudo systemctl stop fan_control.service
-sudo systemctl disable fan_control.service
-
-# Remove files and aliases
-sudo rm /usr/local/bin/fan_control.sh
-sudo rm /usr/local/bin/fan-control
-sudo rm /usr/local/bin/dell-fan-control
-sudo rm /usr/local/bin/fan_calibration.sh
-sudo rm /usr/local/bin/fan-calibrate
-sudo rm /etc/systemd/system/fan_control.service
-sudo rm /etc/fan_control.conf
-
-# Reload systemd
-sudo systemctl daemon-reload
-
-echo "Uninstallation complete."
+sudo fan-control uninstall
 ```
+
+This command will:
+*   Stop and remove the systemd service.
+*   Remove all installed files and configurations.
+*   Clean up symlinks (`fan-control`, `fan-calibrate`).
 
 ## ⚠️ Disclaimer
 
