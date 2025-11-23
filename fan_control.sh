@@ -107,7 +107,7 @@ show_help() {
     echo "  🚀 Profile:       $PROFILE"
     echo "  🌡️  Temp Range:    $MIN_TEMP°C - $MAX_TEMP°C (Crit: $CRITICAL_TEMP°C)"
     echo "  💨 PWM Range:     $MIN_PWM - $MAX_PWM"
-    echo "  🔇 Quiet Limit:   $QUIET_MAX_PWM (Balanced Profile)"
+    echo "  🔇 Quiet Limit PWM:   $QUIET_MAX_PWM (Balanced Profile)"
     echo "  📉 Slew Rate:     $SLEW_RATE_LIMIT"
     echo "  🔄 Hysteresis:    $TEMP_HYSTERESIS°C"
 }
