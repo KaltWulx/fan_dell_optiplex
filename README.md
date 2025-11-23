@@ -22,7 +22,8 @@ Unlike simple linear scripts, this controller uses advanced control theory conce
 
 ## 📋 Requirements
 
-*   **OS:** Linux (Tested on Debian/Ubuntu based systems).
+*   **OS:** Linux (Tested on Arch Linux, Kernel 6.17.8).
+*   **Hardware:** Tested on Dell OptiPlex 7070 (Intel Core i5-9500).
 *   **Kernel Module:** `dell_smm_hwmon` (Standard in most kernels).
 *   **Permissions:** Root access (required to write to hardware PWM controls).
 *   **Dependencies:** Standard system tools (`bash`, `systemd`, `coreutils`).
