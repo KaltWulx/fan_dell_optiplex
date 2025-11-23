@@ -9,20 +9,25 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-echo "=================================================="
-echo "   Dell Optiplex Fan Control - Calibration Tool   "
-echo "=================================================="
-echo "This tool will:"
-echo "1. Stop the fan_control service."
-echo "2. Ask for your preferred temperature limits."
-echo "3. Measure idle temperature (System must be idle!)."
-echo "4. Test fan speeds to find your noise tolerance."
-echo "5. Generate a recommended configuration file."
-echo ""
-read -p "Press [Enter] to start..."
+cat <<'EOF'
+╔═════════════════════════════════════════════════╗
+║   Dell Optiplex Fan Control - Calibration Tool   ║
+╚═════════════════════════════════════════════════╝
+This guided routine will:
+    1. stop the active fan_control service,
+    2. capture your desired temperature thresholds,
+    3. read your idle temperature baseline,
+    4. sweep fan PWM steps while you evaluate noise,
+    5. save or skip a tuned `/etc/fan_control.conf` entry.
+EOF
+
+read -p "Press [Enter] to begin the calibration journey..."
 
 # === 1. HARDWARE DETECTION ===
-echo "--> Detecting hardware..."
+echo ""
+echo "🧭 Step 1 – Hardware Detection"
+echo "--------------------------------"
+echo "Scanning for the CPU temperature sensor..."
 
 # Enable nullglob
 shopt -s nullglob
@@ -34,14 +39,14 @@ if (( ${#temp_candidates[@]} == 0 )); then
     exit 1
 fi
 GET_CPU_TEMP_FILE="${temp_candidates[0]}"
-echo "    CPU Temp Sensor: Found"
+echo "  ✅ CPU Temp Sensor located at: $GET_CPU_TEMP_FILE"
 
 # Find PWM and Fan Inputs
 pwm_candidates=(/sys/devices/platform/dell_smm_hwmon/hwmon/hwmon*/pwm1)
 fan_candidates=(/sys/devices/platform/dell_smm_hwmon/hwmon/hwmon*/fan1_input)
 
 if (( ${#pwm_candidates[@]} == 0 )); then
-    echo "    PWM Control: Not found. Attempting module reload..."
+    echo "  ⚠️  PWM Control file missing. Reloading dell_smm_hwmon..."
     modprobe -r dell_smm_hwmon 2>/dev/null
     sleep 2
     modprobe dell_smm_hwmon force=1 restricted=0 2>/dev/null
@@ -52,7 +57,7 @@ fi
 
 if (( ${#pwm_candidates[@]} > 0 )); then
     SET_FAN_SPEED_FILE="${pwm_candidates[0]}"
-    echo "    PWM Control: Found ($SET_FAN_SPEED_FILE)"
+    echo "  ✅ PWM Control ready at: $SET_FAN_SPEED_FILE"
 else
     echo "Error: Could not enable PWM control. Check BIOS settings."
     exit 1
@@ -60,60 +65,58 @@ fi
 
 if (( ${#fan_candidates[@]} > 0 )); then
     GET_FAN_RPM_FILE="${fan_candidates[0]}"
-    echo "    RPM Sensor: Found ($GET_FAN_RPM_FILE)"
+    echo "  ✅ RPM Sensor ready at: $GET_FAN_RPM_FILE"
 else
-    echo "Warning: RPM sensor not found. Calibration will rely on PWM values only."
+    echo "  ⚠️  RPM sensor missing; RPM data will be unavailable."
 fi
 
 shopt -u nullglob
 
 # === 2. STOP SERVICE ===
 echo ""
-echo "--> Stopping existing fan service..."
+echo "⏹️ Step 2 – Pausing the fan_control service"
+echo "--------------------------------------------"
 systemctl stop fan_control.service 2>/dev/null
-echo "    Service stopped."
+echo "  ✅ fan_control.service stopped temporarily."
 
 # === 3. USER CONFIGURATION (MAX & CRITICAL) ===
 echo ""
-echo "=================================================="
-echo "           PHASE 1: CONFIGURATION                 "
-echo "=================================================="
-echo "Please define your temperature limits."
+echo "⚙️ Step 3 – Temperature Targets"
+echo "--------------------------------"
+echo "We will capture the ramp point and emergency ceiling for your system."
 
 # MAX_TEMP Input
 while true; do
-    read -p "Enter MAX_TEMP (Temp where fan hits high speed, rec: 60-70) [65]: " input_max
+    read -p "  🌡️  Enter MAX_TEMP (fan ramps aggressively at this temp, rec 60-70) [65]: " input_max
     input_max=${input_max:-65}
     if [[ "$input_max" =~ ^[0-9]+$ ]] && (( input_max > 40 && input_max < 90 )); then
         USER_MAX_TEMP=$input_max
         break
     else
-        echo "Invalid value. Please enter a number between 40 and 90."
+    echo "  ❌ Invalid. Pick a number between 40 and 90."
     fi
 done
 
 # CRITICAL_TEMP Input
 while true; do
-    read -p "Enter CRITICAL_TEMP (Emergency full speed, rec: 80-95) [85]: " input_crit
+    read -p "  🚨 Enter CRITICAL_TEMP (emergency full speed, rec 80-95) [85]: " input_crit
     input_crit=${input_crit:-85}
     if [[ "$input_crit" =~ ^[0-9]+$ ]] && (( input_crit > USER_MAX_TEMP && input_crit <= 105 )); then
         USER_CRITICAL_TEMP=$input_crit
         break
     else
-        echo "Invalid value. Must be higher than MAX_TEMP ($USER_MAX_TEMP) and <= 105."
+    echo "  ❌ Invalid. Must be > MAX_TEMP ($USER_MAX_TEMP) and ≤ 105."
     fi
 done
 echo "--> Settings accepted: MAX=$USER_MAX_TEMP°C, CRITICAL=$USER_CRITICAL_TEMP°C"
 
 # === 4. IDLE TEMP MEASUREMENT ===
 echo ""
-echo "=================================================="
-echo "           PHASE 2: IDLE TEMPERATURE              "
-echo "=================================================="
-echo "IMPORTANT: Please ensure your system is IDLE."
-echo "Close heavy applications (browsers, games, compilation)."
-echo "We will measure the baseline temperature to set MIN_TEMP."
-read -p "Press [Enter] when the system is idle..."
+echo "🧊 Step 4 – Idle Temperature Measurement"
+echo "----------------------------------------"
+echo "Ensure nothing demanding is running. This samples your quiet idle temp."
+echo "Close browsers, terminals, or anything that could spike heat."
+read -p "Press [Enter] once your system is idle..."
 
 echo "Cooling down fan to safe level (PWM 128) and measuring..."
 echo "128" > "$SET_FAN_SPEED_FILE"
@@ -151,12 +154,11 @@ fi
 
 # === 5. RPM/NOISE PROFILING ===
 echo ""
-echo "=================================================="
-echo "           PHASE 3: NOISE CALIBRATION             "
-echo "=================================================="
-echo "The fan will speed up in steps."
-echo "Please listen carefully to the fan noise."
-echo "Press [Ctrl+C] at any time to abort safely."
+echo "🎧 Step 5 – RPM & Noise Profiling"
+echo "----------------------------------"
+echo "We will increase the fan PWM in stages while you listen for noise thresholds."
+echo "Tell us when the fan becomes too loud; otherwise press Enter to continue."
+echo "Ctrl+C cancels the process safely at any time."
 echo ""
 
 # Reset to min
@@ -212,16 +214,15 @@ fi
 
 # === 6. GENERATE CONFIG ===
 echo ""
-echo "=================================================="
-echo "           CALIBRATION COMPLETE                   "
-echo "=================================================="
-echo "Summary:"
-echo "- Idle Temp:   $avg_temp°C  -> MIN_TEMP: $rec_min_temp°C"
-echo "- Max Temp:    $USER_MAX_TEMP°C"
-echo "- Crit Temp:   $USER_CRITICAL_TEMP°C"
-echo "- Quiet Limit: PWM $limit_pwm (approx $limit_rpm RPM)"
+echo "✅ Calibration Complete"
+echo "------------------------"
+echo "Summary of the detected curve:"
+echo "  🧊 Idle Temp:          $avg_temp°C → MIN_TEMP: $rec_min_temp°C"
+echo "  🚀 Max Temp:           $USER_MAX_TEMP°C"
+echo "  🚨 Critical Temp:      $USER_CRITICAL_TEMP°C"
+echo "  🔇 Quiet Limit PWM:    $limit_pwm (≈ $limit_rpm RPM)"
 echo ""
-read -p "Do you want to save this configuration? (y/n): " save_opt
+read -p "Would you like to save this configuration? (y/n): " save_opt
 
 if [[ "$save_opt" == "y" || "$save_opt" == "Y" ]]; then
     cat <<EOF > /etc/fan_control.conf
@@ -249,12 +250,12 @@ QUIET_MAX_PWM=$limit_pwm
 TEMP_HYSTERESIS=2
 SLEW_RATE_LIMIT=15
 EOF
-    echo "Configuration saved to /etc/fan_control.conf"
-    echo "Restarting service..."
+    echo "  💾 Configuration saved to /etc/fan_control.conf"
+    echo "  🔁 Restarting fan_control.service..."
     systemctl start fan_control.service
-    echo "Done!"
+    echo "  ✅ Service restarted."
 else
-    echo "Configuration NOT saved."
-    echo "Restarting service with old config..."
+    echo "  ❌ Changes discarded."
+    echo "  🔁 Restarting fan_control.service with previous settings..."
     systemctl start fan_control.service
 fi
