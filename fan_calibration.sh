@@ -177,27 +177,32 @@ for pwm in {60..255..15}; do
     
     # Wait for spin up
     sleep 4 
-    
+
     rpm="N/A"
     if [[ -n "$GET_FAN_RPM_FILE" ]]; then
         read -r rpm < "$GET_FAN_RPM_FILE"
     fi
-    
+
     printf "%-10s | %-10s | Listening...\n" "$pwm" "$rpm"
-    
-    # Give user time to listen
-    sleep 2
-    
-    read -t 10 -p "    Is this too noisy? (y/n/Enter=no): " user_input
-    echo "" # Newline
-    
-    if [[ "$user_input" == "y" || "$user_input" == "Y" ]]; then
-        echo "--> Threshold found at PWM $pwm (~$rpm RPM)"
-        limit_pwm=$((pwm - 15)) # Set limit to previous step
-        limit_rpm=$rpm
-        found_limit=true
-        break
-    fi
+
+    while true; do
+        read -r -p "    Is this too noisy? (y/n/Enter=no): " user_input
+        user_input=${user_input:-n}
+
+        if [[ "$user_input" =~ ^[yY]$ ]]; then
+            echo "--> Threshold found at PWM $pwm (~$rpm RPM)"
+            limit_pwm=$((pwm - 15)) # Set limit to previous step
+            limit_rpm=$rpm
+            found_limit=true
+            break 2
+        elif [[ "$user_input" =~ ^[nN]$ ]]; then
+            echo "--> Noted. Waiting for you to be ready for the next step..."
+            read -r -p "    Press [Enter] to continue..." _
+            break
+        else
+            echo "    Please answer 'y' or 'n'."
+        fi
+    done
 done
 
 if [ "$found_limit" = false ]; then
