@@ -198,8 +198,7 @@ for pwm in {60..255..15}; do
             found_limit=true
             break 2
         elif [[ "$user_input" =~ ^[nN]$ ]]; then
-            echo "--> Noted. Waiting for you to be ready for the next step..."
-            read -r -p "    Press [Enter] to continue..." _
+            echo "--> Noted. Advancing to the next step..."
             break
         else
             echo "    Please answer 'y' or 'n'."
