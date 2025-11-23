@@ -1,12 +1,12 @@
-# DeltaFlow: Dell Optiplex Intelligent Fan Control
+# Dell Optiplex Intelligent Fan Control
 
-**DeltaFlow** is a sophisticated Bash-based daemon designed to take control of the system fan on Dell Optiplex machines (and other hardware using the `dell_smm_hwmon` driver). It replaces the often aggressive or unresponsive BIOS fan curves with a smooth, physics-based control algorithm.
+**This tool** is a sophisticated Bash-based daemon designed to take control of the system fan on Dell Optiplex machines (and other hardware using the `dell_smm_hwmon` driver). It replaces the often aggressive or unresponsive BIOS fan curves with a smooth, physics-based control algorithm.
 
 ## 🎯 Objective
 
 The primary goal is to achieve **silence** during normal operation without compromising **performance** or **safety**. 
 
-Unlike simple linear scripts, DeltaFlow uses advanced control theory concepts:
+Unlike simple linear scripts, this controller uses advanced control theory concepts:
 *   **Feed-Forward:** Anticipates heat by reading CPU Load before the temperature actually rises.
 *   **Derivative Control:** Reacts to the *speed* of temperature change (velocity and acceleration), catching spikes early.
 *   **Hysteresis & Smoothing:** Prevents the annoying "revving" sound (hunting) common in BIOS controllers.
@@ -46,7 +46,7 @@ Unlike simple linear scripts, DeltaFlow uses advanced control theory concepts:
 
 ## ⚙️ Usage
 
-Once installed, DeltaFlow runs as a systemd service (`fan_control.service`) in the background.
+Once installed, the script runs as a systemd service (`fan_control.service`) in the background.
 
 ### CLI Commands
 You can interact with the script using the installed command:
@@ -77,7 +77,7 @@ QUIET_MAX_PWM=165       # Max PWM for "Quiet" zone in Balanced mode
 
 ## 🗑️ Uninstallation
 
-To remove DeltaFlow from your system:
+To remove the fan control from your system:
 
 ```bash
 # Stop and disable the service

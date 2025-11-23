@@ -37,7 +37,7 @@ fi
 # === CLI ARGUMENT PARSING ===
 show_help() {
     echo "Usage: $0 [OPTIONS]"
-    echo "Dell Optiplex Intelligent Fan Control (DeltaFlow)"
+    echo "Dell Optiplex Intelligent Fan Control"
     echo ""
     echo "Options:"
     echo "  --profile <mode>   Sets the profile (balanced, performance)"
