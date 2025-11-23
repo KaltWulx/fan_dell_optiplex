@@ -98,18 +98,18 @@ show_help() {
     echo "  uninstall          Removes the service and all files"
     echo "  --help             Shows this help"
     echo ""
-    echo "Configuration (Loaded from file/defaults):"
+    echo "🔧 Configuration (Loaded from file/defaults):"
     if [[ -f "$CONFIG_FILE" ]]; then
-        echo "  Source:        $CONFIG_FILE"
+        echo "  📂 Source:        $CONFIG_FILE"
     else
-        echo "  Source:        Internal Defaults"
+        echo "  📂 Source:        Internal Defaults"
     fi
-    echo "  Profile:       $PROFILE (Note: Running service may differ if launched with flags)"
-    echo "  Temp Range:    $MIN_TEMP°C - $MAX_TEMP°C (Crit: $CRITICAL_TEMP°C)"
-    echo "  PWM Range:     $MIN_PWM - $MAX_PWM"
-    echo "  Quiet Limit:   $QUIET_MAX_PWM (Balanced Profile)"
-    echo "  Slew Rate:     $SLEW_RATE_LIMIT"
-    echo "  Hysteresis:    $TEMP_HYSTERESIS°C"
+    echo "  🚀 Profile:       $PROFILE"
+    echo "  🌡️  Temp Range:    $MIN_TEMP°C - $MAX_TEMP°C (Crit: $CRITICAL_TEMP°C)"
+    echo "  💨 PWM Range:     $MIN_PWM - $MAX_PWM"
+    echo "  🔇 Quiet Limit:   $QUIET_MAX_PWM (Balanced Profile)"
+    echo "  📉 Slew Rate:     $SLEW_RATE_LIMIT"
+    echo "  🔄 Hysteresis:    $TEMP_HYSTERESIS°C"
 }
 
 # Process arguments
