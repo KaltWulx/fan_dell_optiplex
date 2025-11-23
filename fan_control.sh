@@ -251,8 +251,18 @@ log_message() {
     # Optimization: Use printf builtin for date instead of calling 'date' binary
     local now
     printf -v now '%(%Y-%m-%d %H:%M:%S)T' -1
+
+    local level_icon="ℹ️"
+    case "$1" in
+        SUCCESS:*) level_icon="✅" ;;
+        WARN:*)    level_icon="⚠️" ;;
+        ERROR:*)   level_icon="🚨" ;;
+        CRITICAL:*) level_icon="🔥" ;;
+        PERF-*)   level_icon="⚡" ;;
+    esac
+
     # Only use logger to avoid contaminating output of substituted commands
-    logger -t "$LOG_TAG" "$now - $1"
+    logger -t "$LOG_TAG" "$now | $level_icon $1"
 }
 
 # === CONTROL STRATEGIES (PROFILES) ===
