@@ -116,8 +116,30 @@ show_help() {
 while [[ $# -gt 0 ]]; do
     case $1 in
         --profile)
-            PROFILE="$2"
-            shift 2
+            NEW_PROFILE="$2"
+            if [[ ! "$NEW_PROFILE" =~ ^(balanced|performance)$ ]]; then
+                echo "Error: Invalid profile '$NEW_PROFILE'. Use 'balanced' or 'performance'."
+                exit 1
+            fi
+            
+            if [[ $EUID -ne 0 ]]; then
+               echo "Error: Changing profile requires root privileges."
+               exit 1
+            fi
+
+            echo "Updating configuration to use profile: $NEW_PROFILE"
+            
+            # Update config file using sed
+            if grep -q "^PROFILE=" "$CONFIG_FILE"; then
+                sed -i "s/^PROFILE=.*/PROFILE=\"$NEW_PROFILE\"/" "$CONFIG_FILE"
+            else
+                echo "PROFILE=\"$NEW_PROFILE\"" >> "$CONFIG_FILE"
+            fi
+            
+            echo "Restarting fan_control service..."
+            systemctl restart fan_control.service
+            echo "Done. Active profile is now: $NEW_PROFILE"
+            exit 0
             ;;
         --log)
             echo "Showing logs for $LOG_TAG (Ctrl+C to exit)..."
