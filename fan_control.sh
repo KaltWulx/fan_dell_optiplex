@@ -542,12 +542,14 @@ apply_fan_control() {
             local dec=$((cpu_load % 100))
             printf -v load_display "%d.%02d" $whole $dec
         fi
+        local load_percent=$cpu_load
+        local fan_percent=$(( target_pwm * 100 / MAX_PWM ))
 
         if [[ -n "$SET_FAN_SPEED_FILE" ]]; then
             echo "$target_pwm" > "$SET_FAN_SPEED_FILE"
-            log_message "Temp: ${current_temp}°C (Δ+${temp_diff}°C), Load: ${load_display}, RPM: ${current_rpm}, PWM: ${target_pwm} (prev: ${previous_pwm})"
+            log_message "Temp: ${current_temp}°C (Δ+${temp_diff}°C), Load: ${load_percent}% (${load_display}), Fan: ${fan_percent}% (PWM: ${target_pwm}), RPM: ${current_rpm} (prev PWM: ${previous_pwm})"
         else
-            log_message "Temp: ${current_temp}°C (Δ+${temp_diff}°C), Load: ${load_display}, RPM: ${current_rpm}, PWM: ${target_pwm} (NO CONTROL - monitoring only)"
+            log_message "Temp: ${current_temp}°C (Δ+${temp_diff}°C), Load: ${load_percent}% (${load_display}), Fan: ${fan_percent}% (PWM: ${target_pwm}) (NO CONTROL - monitoring only)"
         fi
         
         # Update global state
