@@ -17,6 +17,9 @@ Unlike simple linear scripts, this controller uses advanced control theory conce
     *   **Balanced:** Optimized for silence. Keeps the fan below your noise threshold (calibrated) until temperatures exceed 60°C.
     *   **Performance:** Aggressive cooling that prioritizes thermal headroom over noise, using predictive algorithms.
 *   **Smart Calibration:** Includes an interactive tool (`fan_calibration.sh`) to test your specific hardware and hearing tolerance.
+    *   During calibration the script enumerates every `dell_smm_hwmon` fan (`fan*_input`) and records each `_min`/`_max` range.
+    *   Those findings are serialized into `/etc/fan_control.conf` as the `CONFIG_FAN_...` arrays so the controller knows exactly which sensors to monitor.
+*   **Calibration-aware control:** `fan_control.sh` loads the `CONFIG_FAN_RPM_FILES`, `CONFIG_FAN_MIN_VALUES`, and `CONFIG_FAN_MAX_VALUES` arrays at startup, logs every detected fan and range, and falls back to autodetection only if the calibrated files disappear.
 *   **Safety First:** Hard-coded critical temperature overrides and fail-safe mechanisms.
 *   **Resource Efficient:** Written in pure Bash using built-ins to minimize CPU usage.
 
@@ -73,13 +76,13 @@ sudo fan-calibrate
 ```
 
 ### Configuration File
-Located at `/etc/fan_control.conf`. You can edit this file to tweak settings manually:
+Located at `/etc/fan_control.conf`. You can edit this file to tweak settings manually. The calibration tool also writes the detected fan devices and their `_min/_max` readings into `CONFIG_FAN_RPM_FILES`, `CONFIG_FAN_MIN_VALUES`, and `CONFIG_FAN_MAX_VALUES`, which `fan_control.sh` consumes when it starts, ensuring the daemon always knows which sensors to monitor.
 
 ```bash
 PROFILE="balanced"      # "balanced" or "performance"
-MIN_TEMP=35             # Fan starts ramping up here
-MAX_TEMP=65             # Fan reaches high speed here
-QUIET_MAX_PWM=165       # Max PWM for "Quiet" zone in Balanced mode
+MIN_TEMP=35              # Fan starts ramping up here
+MAX_TEMP=65              # Fan reaches high speed here
+QUIET_MAX_PWM=165        # Max PWM for "Quiet" zone in Balanced mode
 ```
 
 ## 🗑️ Uninstallation
