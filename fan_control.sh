@@ -13,7 +13,7 @@ MIN_TEMP=30
 MAX_TEMP=60
 CRITICAL_TEMP=80  # Critical temperature for protection
 
-# Define minimum and maximum PWM values
+    # Define minimum and maximum PWM values
 MIN_PWM=60
 MAX_PWM=255
 QUIET_MAX_PWM=165 # Default quiet limit if not in config
@@ -27,6 +27,11 @@ EMERGENCY_PWM=255      # Emergency PWM
 
 # Slew Rate Configuration (Speed change smoothing)
 SLEW_RATE_LIMIT=15     # Maximum PWM change allowed per cycle
+
+# Track calibration fan data (configured by fan_calibration.sh)
+declare -a CONFIG_FAN_RPM_FILES=()
+declare -a CONFIG_FAN_MIN_VALUES=()
+declare -a CONFIG_FAN_MAX_VALUES=()
 
 # Load external configuration if exists
 if [[ -f "$CONFIG_FILE" ]]; then
@@ -173,6 +178,11 @@ GET_CPU_TEMP_FILE=""
 GET_FAN_RPM_FILE=""
 SET_FAN_SPEED_FILE=""
 
+# Track all reported fan sensors and their ranges
+declare -a ALL_FAN_RPM_FILES=()
+declare -a FAN_MIN_VALUES=()
+declare -a FAN_MAX_VALUES=()
+
 # Resolve globs to concrete paths and assign to variables
 resolve_paths() {
     # Enable nullglob so non-matching patterns expand to nothing
@@ -188,12 +198,26 @@ resolve_paths() {
     # Check if dell_smm_hwmon is available and functional
     local pwm_candidates=(/sys/devices/platform/dell_smm_hwmon/hwmon/hwmon*/pwm1)
     local fan_candidates=(/sys/devices/platform/dell_smm_hwmon/hwmon/hwmon*/fan1_input)
-    
-    if (( ${#fan_candidates[@]} > 0 )); then
-        GET_FAN_RPM_FILE="${fan_candidates[0]}"
-        log_message "Using fan rpm file: $GET_FAN_RPM_FILE"
+
+    apply_calibration_data
+
+    local need_autodetect=0
+    if (( ${#ALL_FAN_RPM_FILES[@]} == 0 )); then
+        need_autodetect=1
+    elif [[ ! -r "${ALL_FAN_RPM_FILES[0]}" ]]; then
+        log_message "WARN: Calibrated fan rpm file missing; falling back to autodetection."
+        ALL_FAN_RPM_FILES=()
+        need_autodetect=1
+    else
+        GET_FAN_RPM_FILE="${ALL_FAN_RPM_FILES[0]}"
+        log_message "INFO: Using calibrated fan rpm file: $GET_FAN_RPM_FILE"
+        log_message "INFO: Monitored fan sensors: ${ALL_FAN_RPM_FILES[*]}"
     fi
-    
+
+    if (( need_autodetect == 1 )); then
+        set_fan_candidates "${fan_candidates[@]}"
+    fi
+
     if (( ${#pwm_candidates[@]} == 0 )) && (( ${#fan_candidates[@]} == 0 )); then
         log_message "WARN: dell_smm_hwmon does not expose fan files - attempting to reload module with force=1 restricted=0"
         
@@ -210,7 +234,10 @@ resolve_paths() {
         # Check again after reload
         pwm_candidates=(/sys/devices/platform/dell_smm_hwmon/hwmon/hwmon*/pwm1)
         fan_candidates=(/sys/devices/platform/dell_smm_hwmon/hwmon/hwmon*/fan1_input)
-        
+        if (( need_autodetect == 1 )); then
+            set_fan_candidates "${fan_candidates[@]}"
+        fi
+
         if (( ${#pwm_candidates[@]} == 0 )) && (( ${#fan_candidates[@]} == 0 )); then
             log_message "ERROR: EC/BIOS blocked fan control access. Available files:"
             if ls /sys/devices/platform/dell_smm_hwmon/hwmon/hwmon*/ 2>/dev/null | grep -v "device\|power\|subsystem\|uevent" | head -5; then
@@ -263,6 +290,76 @@ log_message() {
 
     # Only use logger to avoid contaminating output of substituted commands
     logger -t "$LOG_TAG" "$now | $level_icon $1"
+}
+
+apply_calibration_data() {
+    if (( ${#CONFIG_FAN_RPM_FILES[@]} == 0 )); then
+        return
+    fi
+
+    ALL_FAN_RPM_FILES=("${CONFIG_FAN_RPM_FILES[@]}")
+    FAN_MIN_VALUES=("${CONFIG_FAN_MIN_VALUES[@]}")
+    FAN_MAX_VALUES=("${CONFIG_FAN_MAX_VALUES[@]}")
+    GET_FAN_RPM_FILE="${ALL_FAN_RPM_FILES[0]}"
+
+    log_message "INFO: Loaded ${#ALL_FAN_RPM_FILES[@]} fan(s) from calibration data"
+    local idx
+    for idx in "${!ALL_FAN_RPM_FILES[@]}"; do
+        local fmt_min=${FAN_MIN_VALUES[idx]:-N/A}
+        local fmt_max=${FAN_MAX_VALUES[idx]:-N/A}
+        log_message "INFO: Fan $(basename "${ALL_FAN_RPM_FILES[idx]}") calibrated range min=${fmt_min} max=${fmt_max}"
+    done
+}
+
+collect_fan_ranges() {
+    FAN_MIN_VALUES=()
+    FAN_MAX_VALUES=()
+
+    if (( $# == 0 )); then
+        return
+    fi
+
+    local fan_file min_file max_file fan_min fan_max
+
+    for fan_file in "$@"; do
+        min_file="${fan_file%_input}_min"
+        max_file="${fan_file%_input}_max"
+        fan_min="N/A"
+        fan_max="N/A"
+
+        if [[ -r "$min_file" ]]; then
+            fan_min=$(<"$min_file")
+        fi
+        if [[ -r "$max_file" ]]; then
+            fan_max=$(<"$max_file")
+        fi
+
+        FAN_MIN_VALUES+=("$fan_min")
+        FAN_MAX_VALUES+=("$fan_max")
+        log_message "INFO: Fan $(basename "$fan_file") range read from module: min=${fan_min} max=${fan_max}"
+    done
+}
+
+set_fan_candidates() {
+    ALL_FAN_RPM_FILES=("$@")
+
+    if (( ${#ALL_FAN_RPM_FILES[@]} == 0 )); then
+        GET_FAN_RPM_FILE=""
+        log_message "WARN: No fan sensors detected via dell_smm_hwmon."
+        return
+    fi
+
+    GET_FAN_RPM_FILE="${ALL_FAN_RPM_FILES[0]}"
+    log_message "Using fan rpm file: $GET_FAN_RPM_FILE"
+    collect_fan_ranges "${ALL_FAN_RPM_FILES[@]}"
+
+    local fan_list=""
+    local fan_path
+    for fan_path in "${ALL_FAN_RPM_FILES[@]}"; do
+        fan_list+="$(basename "$fan_path") "
+    done
+    fan_list=${fan_list% }
+    log_message "INFO: Monitored fan sensors: $fan_list"
 }
 
 # === CONTROL STRATEGIES (PROFILES) ===

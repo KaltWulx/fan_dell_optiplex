@@ -70,6 +70,35 @@ else
     echo "  ⚠️  RPM sensor missing; RPM data will be unavailable."
 fi
 
+
+CONFIG_FAN_RPM_FILES=()
+CONFIG_FAN_MIN_VALUES=()
+CONFIG_FAN_MAX_VALUES=()
+
+if (( ${#fan_candidates[@]} > 0 )); then
+    CONFIG_FAN_RPM_FILES=("${fan_candidates[@]}")
+    for fan_path in "${fan_candidates[@]}"; do
+        fan_min="N/A"
+        fan_max="N/A"
+        min_file="${fan_path%_input}_min"
+        max_file="${fan_path%_input}_max"
+
+        if [[ -r "$min_file" ]]; then
+            fan_min=$(<"$min_file")
+        fi
+        if [[ -r "$max_file" ]]; then
+            fan_max=$(<"$max_file")
+        fi
+
+        CONFIG_FAN_MIN_VALUES+=("$fan_min")
+        CONFIG_FAN_MAX_VALUES+=("$fan_max")
+        echo "  ℹ️  Detected fan $(basename "$fan_path") range min=${fan_min} max=${fan_max}"
+    done
+    echo "  ℹ️  Total fans detected: ${#CONFIG_FAN_RPM_FILES[@]}"
+else
+    echo "  ℹ️  No RPM sensors detected via dell_smm_hwmon. Fan list will remain empty."
+fi
+
 shopt -u nullglob
 
 # === 2. STOP SERVICE ===
@@ -224,7 +253,8 @@ echo ""
 read -p "Would you like to save this configuration? (y/n): " save_opt
 
 if [[ "$save_opt" == "y" || "$save_opt" == "Y" ]]; then
-    cat <<EOF > /etc/fan_control.conf
+    {
+        cat <<EOF
 # /etc/fan_control.conf
 # Generated on $(date)
 
@@ -245,10 +275,40 @@ MAX_PWM=255
 # Used by the 'balanced' profile as a soft limit.
 QUIET_MAX_PWM=$limit_pwm
 
+# Fan configuration detected during calibration
+CONFIG_FAN_RPM_FILES=(
+EOF
+        if (( ${#CONFIG_FAN_RPM_FILES[@]} > 0 )); then
+            for path in "${CONFIG_FAN_RPM_FILES[@]}"; do
+                printf '    "%s"\n' "$path"
+            done
+        fi
+        cat <<EOF
+)
+CONFIG_FAN_MIN_VALUES=(
+EOF
+        if (( ${#CONFIG_FAN_MIN_VALUES[@]} > 0 )); then
+            for val in "${CONFIG_FAN_MIN_VALUES[@]}"; do
+                printf '    "%s"\n' "$val"
+            done
+        fi
+        cat <<EOF
+)
+CONFIG_FAN_MAX_VALUES=(
+EOF
+        if (( ${#CONFIG_FAN_MAX_VALUES[@]} > 0 )); then
+            for val in "${CONFIG_FAN_MAX_VALUES[@]}"; do
+                printf '    "%s"\n' "$val"
+            done
+        fi
+        cat <<EOF
+)
+
 # Advanced
 TEMP_HYSTERESIS=2
 SLEW_RATE_LIMIT=15
 EOF
+    } > /etc/fan_control.conf
     echo "  💾 Configuration saved to /etc/fan_control.conf"
     echo "  🔁 Restarting fan_control.service..."
     systemctl start fan_control.service
