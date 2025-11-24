@@ -188,7 +188,7 @@ for pwm in {60..255..15}; do
     printf "%-10s | %-10s | Listening...\n" "$pwm" "$rpm"
 
     while true; do
-    read -r -p "    Is this too noisy? (y/n/Enter=no – Enter/n auto-advances): " user_input
+    read -r -p "    Is this too noisy? (y/n/Enter=no): " user_input
         user_input=${user_input:-n}
 
         if [[ "$user_input" =~ ^[yY]$ ]]; then
