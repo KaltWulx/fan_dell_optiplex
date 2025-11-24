@@ -33,6 +33,10 @@ declare -a CONFIG_FAN_RPM_FILES=()
 declare -a CONFIG_FAN_MIN_VALUES=()
 declare -a CONFIG_FAN_MAX_VALUES=()
 
+# CPU usage calculation variables
+declare -a prev_cpu_times=()
+calculated_cpu_usage=0
+
 # Load external configuration if exists
 if [[ -f "$CONFIG_FILE" ]]; then
     # shellcheck source=/dev/null
@@ -292,6 +296,46 @@ log_message() {
     logger -t "$LOG_TAG" "$now | $level_icon $1"
 }
 
+get_cpu_usage() {
+    local cpu_line
+    read -r cpu_line < /proc/stat
+    cpu_line=${cpu_line#cpu }
+
+    local -a times
+    read -ra times <<< "$cpu_line"
+
+    local idle=${times[3]:-0}
+    local iowait=${times[4]:-0}
+    local irq=${times[5]:-0}
+    local softirq=${times[6]:-0}
+    local steal=${times[7]:-0}
+
+    local idle_all=$((idle + iowait))
+    local non_idle=$((times[0] + times[1] + times[2] + irq + softirq + steal))
+    local total=$((idle_all + non_idle))
+
+    if (( ${#prev_cpu_times[@]} > 0 )); then
+        local prev_total=${prev_cpu_times[0]}
+        local prev_idle=${prev_cpu_times[1]}
+        local total_diff=$((total - prev_total))
+        local idle_diff=$((idle_all - prev_idle))
+
+        if (( total_diff > 0 )); then
+            local used_diff=$((total_diff - idle_diff))
+            local usage=$(( used_diff * 100 / total_diff ))
+            if (( usage < 0 )); then usage=0; fi
+            if (( usage > 100 )); then usage=100; fi
+            calculated_cpu_usage=$usage
+        else
+            calculated_cpu_usage=0
+        fi
+    else
+        calculated_cpu_usage=0
+    fi
+
+    prev_cpu_times=("$total" "$idle_all")
+}
+
 apply_calibration_data() {
     if (( ${#CONFIG_FAN_RPM_FILES[@]} == 0 )); then
         return
@@ -368,54 +412,6 @@ set_fan_candidates() {
 strategy_balanced() {
     local temp=$1
     local temp_diff=$2
-    local temp_accel=$3
-    local cpu_load=$4
-    local predicted_temp=$temp
-
-    # 1. Feed-Forward: CPU Load (Pure anticipation)
-    # cpu_load is passed as integer (e.g., 100 for 1.00 load)
-    
-    if (( cpu_load > 100 )); then
-        local load_factor=$(( (cpu_load - 100) / 50 ))
-        if (( load_factor > 10 )); then load_factor=10; fi
-        predicted_temp=$((predicted_temp + load_factor))
-        if (( load_factor > 0 )); then
-            log_message "PERF-FEEDFORWARD: High CPU Load ($cpu_load), +${load_factor}°C compensation"
-        fi
-    fi
-    
-    # 2. Base Prediction (Velocity)
-    if (( temp_diff > 0 )); then
-        predicted_temp=$((predicted_temp + temp_diff))
-    fi
-    
-    # 3. Acceleration Correction
-    if (( temp_accel > 0 )); then
-        local boost=$((temp_accel * 3))
-        predicted_temp=$((predicted_temp + boost))
-        log_message "PERF-BOOST: Thermal acceleration (+${temp_accel}), Predicted Temp: ${predicted_temp}°C"
-    fi
-    
-    # Prediction limits
-    if (( predicted_temp > MAX_TEMP )); then predicted_temp=$MAX_TEMP; fi
-    if (( predicted_temp < MIN_TEMP )); then predicted_temp=$MIN_TEMP; fi
-    
-    # Linear Mapping on prediction
-    local pwm=$(( (predicted_temp - MIN_TEMP) * (MAX_PWM - MIN_PWM) / (MAX_TEMP - MIN_TEMP) + MIN_PWM ))
-    
-    # Elevated minimum floor for performance
-    local perf_min_pwm=$((MIN_PWM + 30))
-    if (( pwm < perf_min_pwm )); then pwm=$perf_min_pwm; fi
-    
-    echo $pwm
-}
-
-# === CONTROL STRATEGIES (PROFILES) ===
-
-# Balanced Strategy: Dual Slope (Quiet < 60°C, Aggressive > 60°C) + Load Compensation
-strategy_balanced() {
-    local temp=$1
-    local temp_diff=$2
     local cpu_load=$3
     local current_rpm=$4
     local pwm
@@ -446,9 +442,9 @@ strategy_balanced() {
 
     # 2. CPU Load Compensation (Feed-forward)
     # Only apply if we are not yet at critical levels, to prevent premature saturation
-    if (( cpu_load > 150 )); then  # Load > 1.5
-        local load_boost=$(( (cpu_load - 150) / 10 )) # +1 PWM per 0.1 load above 1.5
-        if (( load_boost > 20 )); then load_boost=20; fi # Cap boost
+    if (( cpu_load > 50 )); then  # Usage > 50%
+        local load_boost=$(( (cpu_load - 50) / 4 )) # +1 PWM per 4% usage above 50% (reduced aggressiveness)
+        if (( load_boost > 10 )); then load_boost=10; fi # Cap boost to 10 PWM
         pwm=$(( pwm + load_boost ))
     fi
 
@@ -470,12 +466,12 @@ strategy_performance() {
     # 1. Feed-Forward: CPU Load (Pure anticipation)
     # cpu_load is passed as integer (e.g., 100 for 1.00 load)
     
-    if (( cpu_load > 100 )); then
-        local load_factor=$(( (cpu_load - 100) / 50 ))
+    if (( cpu_load > 20 )); then
+        local load_factor=$(( (cpu_load - 20) / 10 ))
         if (( load_factor > 10 )); then load_factor=10; fi
         predicted_temp=$((predicted_temp + load_factor))
         if (( load_factor > 0 )); then
-            log_message "PERF-FEEDFORWARD: High CPU Load ($cpu_load), +${load_factor}°C compensation"
+            log_message "PERF-FEEDFORWARD: High CPU Usage ($cpu_load%), +${load_factor}°C compensation"
         fi
     fi
     
@@ -484,11 +480,12 @@ strategy_performance() {
         predicted_temp=$((predicted_temp + temp_diff))
     fi
     
-    # 3. Acceleration Correction
+    # 3. Acceleration Correction (Reduced aggressiveness)
     if (( temp_accel > 0 )); then
-        local boost=$((temp_accel * 3))
+        local boost=$((temp_accel * 1))  # Reduced from *3 to *1
+        if (( boost > 10 )); then boost=10; fi  # Cap boost to prevent excessive predictions
         predicted_temp=$((predicted_temp + boost))
-        log_message "PERF-BOOST: Thermal acceleration (+${temp_accel}), Predicted Temp: ${predicted_temp}°C"
+        log_message "PERF-BOOST: Thermal acceleration (+${temp_accel}), Boost: +${boost}°C, Predicted Temp: ${predicted_temp}°C"
     fi
     
     # Prediction limits
@@ -501,6 +498,10 @@ strategy_performance() {
     # Elevated minimum floor for performance
     local perf_min_pwm=$((MIN_PWM + 30))
     if (( pwm < perf_min_pwm )); then pwm=$perf_min_pwm; fi
+    
+    # Clamp PWM to valid range
+    if (( pwm > MAX_PWM )); then pwm=$MAX_PWM; fi
+    if (( pwm < MIN_PWM )); then pwm=$MIN_PWM; fi
     
     echo $pwm
 }
@@ -604,8 +605,9 @@ apply_fan_control() {
     local current_temp=$2
     local temp_diff=$3
     local is_emergency=$4
-    local cpu_load=$5
+    local cpu_usage=$5
     local current_rpm=$6
+    local force_update=$7
     
     # Calculate difference with current PWM
     local pwm_diff=$((target_pwm - previous_pwm))
@@ -615,11 +617,12 @@ apply_fan_control() {
     local temp_delta=$((current_temp - last_temp_update))
     if (( temp_delta < 0 )); then temp_delta=$((-temp_delta)); fi
 
-    # Update conditions: Significant PWM change, Temp Hysteresis, leaving minimum, or emergency
-    if (( pwm_diff > 10 )) || (( temp_delta >= TEMP_HYSTERESIS )) || (( previous_pwm == MIN_PWM )) || (( is_emergency )); then
+    # Update conditions: Significant PWM change, Temp Hysteresis, leaving minimum, emergency, or forced update
+    if (( pwm_diff > 10 )) || (( temp_delta >= TEMP_HYSTERESIS )) || (( previous_pwm == MIN_PWM )) || (( is_emergency )) || (( force_update )); then
         
         # === SLEW RATE LIMITING (Smoothing) ===
-        if (( ! is_emergency )); then
+        # Skip slew rate limiting if emergency or forced update (to ensure we re-assert control quickly)
+        if (( ! is_emergency )) && (( ! force_update )); then
             local change=$((target_pwm - previous_pwm))
             if (( change > SLEW_RATE_LIMIT )); then
                 target_pwm=$((previous_pwm + SLEW_RATE_LIMIT))
@@ -630,23 +633,28 @@ apply_fan_control() {
         fi
 
         # === HARDWARE WRITING ===
-        # Format load for display (e.g. 150 -> 1.50)
-        local load_display
-        if (( cpu_load < 100 )); then
-            printf -v load_display "0.%02d" $cpu_load
-        else
-            local whole=$((cpu_load / 100))
-            local dec=$((cpu_load % 100))
-            printf -v load_display "%d.%02d" $whole $dec
+        local load_display="${cpu_usage}%"
+        local load_percent=$cpu_usage
+        # Calculate fan percentage based on actual PWM range (MIN_PWM to MAX_PWM)
+        local fan_percent=$(( (target_pwm - MIN_PWM) * 100 / (MAX_PWM - MIN_PWM) ))
+        # Clamp to 0-100 just in case
+        if (( fan_percent < 0 )); then fan_percent=0; fi
+        if (( fan_percent > 100 )); then fan_percent=100; fi
+        local rpm_percent="N/A"
+        local max_rpm=0
+        if (( ${#FAN_MAX_VALUES[@]} > 0 )); then
+            max_rpm=${FAN_MAX_VALUES[0]}
         fi
-        local load_percent=$cpu_load
-        local fan_percent=$(( target_pwm * 100 / MAX_PWM ))
+        if [[ "$max_rpm" =~ ^[0-9]+$ ]] && (( max_rpm > 0 )) && [[ "$current_rpm" =~ ^[0-9]+$ ]]; then
+            rpm_percent=$(( current_rpm * 100 / max_rpm ))
+            if (( rpm_percent > 100 )); then rpm_percent=100; fi
+        fi
 
         if [[ -n "$SET_FAN_SPEED_FILE" ]]; then
             echo "$target_pwm" > "$SET_FAN_SPEED_FILE"
-            log_message "Temp: ${current_temp}°C (Δ+${temp_diff}°C), Load: ${load_percent}% (${load_display}), Fan: ${fan_percent}% (PWM: ${target_pwm}), RPM: ${current_rpm} (prev PWM: ${previous_pwm})"
+            log_message "Temp: ${current_temp}°C (Δ+${temp_diff}°C), Usage: ${load_percent}% (${load_display}), Fan: ${fan_percent}% (PWM: ${target_pwm}), RPM: ${current_rpm} (${rpm_percent}% of max) (prev PWM: ${previous_pwm})"
         else
-            log_message "Temp: ${current_temp}°C (Δ+${temp_diff}°C), Load: ${load_percent}% (${load_display}), Fan: ${fan_percent}% (PWM: ${target_pwm}) (NO CONTROL - monitoring only)"
+            log_message "Temp: ${current_temp}°C (Δ+${temp_diff}°C), Usage: ${load_percent}% (${load_display}), Fan: ${fan_percent}% (PWM: ${target_pwm}) (NO CONTROL - monitoring only)"
         fi
         
         # Update global state
@@ -656,6 +664,7 @@ apply_fan_control() {
 }
 
 # The script logic will run in an infinite loop
+loop_counter=0
 while true; do
     # 1. SENSOR READING
     read -r raw_temp < "$GET_CPU_TEMP_FILE"
@@ -673,6 +682,10 @@ while true; do
     fi
     current_cpu_load=$load_int
     
+    # Read actual CPU usage percentage
+    get_cpu_usage
+    current_cpu_usage=$calculated_cpu_usage
+    
     # 2. DERIVATIVE CALCULATION (Velocity and Acceleration)
     temp_diff=$((current_cpu_temp - previous_temp))
     temp_accel=$((temp_diff - previous_temp_diff))
@@ -688,15 +701,24 @@ while true; do
     if (( calc_diff < 0 )); then calc_diff=0; fi
     
     # 3. TARGET PWM CALCULATION
-    target_pwm=$(calculate_pwm $current_cpu_temp $calc_diff $temp_accel $current_cpu_load $current_rpm)
+    target_pwm=$(calculate_pwm $current_cpu_temp $calc_diff $temp_accel $current_cpu_usage $current_rpm)
     
     # 4. EMERGENCY EVALUATION
     emergency_condition=$((current_cpu_temp >= CRITICAL_TEMP || temp_diff > TEMP_RISE_THRESHOLD))
     
-    # 5. CONTROL APPLICATION
-    apply_fan_control "$target_pwm" "$current_cpu_temp" "$temp_diff" "$emergency_condition" "$current_cpu_load" "$current_rpm"
+    # 5. FORCE UPDATE CHECK (Every ~30 seconds / 15 loops)
+    # This ensures we reclaim control if BIOS reset the fan during suspend/sleep
+    force_update=0
+    ((loop_counter++))
+    if (( loop_counter >= 15 )); then
+        force_update=1
+        loop_counter=0
+    fi
+
+    # 6. CONTROL APPLICATION
+    apply_fan_control "$target_pwm" "$current_cpu_temp" "$temp_diff" "$emergency_condition" "$current_cpu_usage" "$current_rpm" "$force_update"
     
-    # 6. STATE UPDATE
+    # 7. STATE UPDATE
     previous_temp_diff=$temp_diff
     previous_temp=$current_cpu_temp
 
