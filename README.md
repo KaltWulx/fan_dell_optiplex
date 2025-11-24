@@ -19,7 +19,6 @@ Unlike simple linear scripts, this controller uses advanced control theory conce
 *   **Smart Calibration:** Includes an interactive tool (`fan_calibration.sh`) to test your specific hardware and hearing tolerance.
     *   During calibration the script enumerates every `dell_smm_hwmon` fan (`fan*_input`) and records each `_min`/`_max` range.
     *   Those findings are serialized into `/etc/fan_control.conf` as the `CONFIG_FAN_...` arrays so the controller knows exactly which sensors to monitor.
-*   **Calibration-aware control:** `fan_control.sh` loads the `CONFIG_FAN_RPM_FILES`, `CONFIG_FAN_MIN_VALUES`, and `CONFIG_FAN_MAX_VALUES` arrays at startup, logs every detected fan and range, and falls back to autodetection only if the calibrated files disappear.
 *   **Safety First:** Hard-coded critical temperature overrides and fail-safe mechanisms.
 *   **Resource Efficient:** Written in pure Bash using built-ins to minimize CPU usage.
 
