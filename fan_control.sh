@@ -5,7 +5,7 @@ LOG_TAG="fan_control"
 CONFIG_FILE="/etc/fan_control.conf"
 
 # === DEFAULT VALUES (Overwritten if external config exists) ===
-# Energy profile: "quiet", "balanced", "performance"
+# Energy profile:  "balanced", "performance"
 PROFILE="balanced"
 
 # Define temperature thresholds in Celsius for smooth mapping
